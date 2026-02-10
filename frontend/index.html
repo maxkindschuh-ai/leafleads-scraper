@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LeafLeads Scraper (MVP)</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="wrap">
+    <h1>LeafLeads Scraper</h1>
+    <p class="sub">Enter keywords and area, click Start, watch progress, then download CSV (Name, Phone, Email).</p>
+
+    <form id="jobForm">
+      <label>Keywords
+        <input id="keywords" type="text" value="tree service, tree removal, arborist, stump grinding, tree trimming" />
+      </label>
+      <div class="grid">
+        <label>Country
+          <input id="country" type="text" value="US" />
+        </label>
+        <label>States (comma-separated)
+          <input id="states" type="text" placeholder="KY, OH" />
+        </label>
+      </div>
+      <button type="submit">Start</button>
+    </form>
+
+    <div id="progress" class="card hidden">
+      <h3>Progress</h3>
+      <div id="counts">Found 0 • Deduped 0 • With Email 0</div>
+      <div id="state">Waiting…</div>
+      <button id="download" disabled>Download CSV</button>
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById('jobForm');
+    const progress = document.getElementById('progress');
+    const counts = document.getElementById('counts');
+    const stateEl = document.getElementById('state');
+    const dlBtn = document.getElementById('download');
+
+    let jobId = null;
+    let poll = null;
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const body = {
+        keywords: document.getElementById('keywords').value,
+        country: document.getElementById('country').value,
+        states: document.getElementById('states').value
+      };
+      const r = await fetch('/api/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const j = await r.json();
+      jobId = j.jobId;
+      progress.classList.remove('hidden');
+      stateEl.textContent = 'Running…';
+      dlBtn.disabled = true;
+
+      if (poll) clearInterval(poll);
+      poll = setInterval(async () => {
+        const s = await fetch(`/api/status?jobId=${jobId}`);
+        const d = await s.json();
+        const t = d.totals || { found: 0, deduped: 0, withEmail: 0 };
+        counts.textContent = `Found ${t.found} • Deduped ${t.deduped} • With Email ${t.withEmail}`;
+        stateEl.textContent = d.state;
+        if (d.state === 'done') {
+          clearInterval(poll);
+          dlBtn.disabled = false;
+        }
+      }, 800);
+    });
+
+    dlBtn.addEventListener('click', async () => {
+      if (!jobId) return;
+      const url = `/api/download?jobId=${jobId}`;
+      window.location = url;
+    });
+  </script>
+</body>
+</html>
